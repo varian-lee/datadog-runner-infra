@@ -1,0 +1,107 @@
+# 🐶 Datadog Runner - Git Ignore 설정
+
+# ===== 민감한 정보 =====
+# Datadog API 키 및 시크릿
+*.env
+.env*
+**/secrets/
+datadog-secret.yaml
+
+# AWS 자격 증명
+.aws/
+aws-credentials.json
+iam_policy.json
+
+# 로그 파일
+*.log
+logs/
+agent_status.log
+krakend_check*.log
+openmetrics_check.log
+
+# 임시 파일
+cookies.txt
+*.tmp
+*.temp
+
+# ===== 빌드 아티팩트 =====
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Java/Maven
+target/
+*.jar
+*.war
+*.ear
+*.class
+.m2/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ===== IDE 및 에디터 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===== 클라우드 설정 =====
+# CloudFront 설정 파일 (민감한 정보 포함 가능)
+cloudfront-*.json
+current-config.json
+
+# Kubernetes 임시 파일
+k8s-updated/
+
+# ===== 개발 도구 =====
+# Cursor AI 파일
+cursor_.md
+
+# 백업 파일
+*.bak
+*.backup
+*-org.*
+초반README.md
+
+# Terraform (향후 사용 시)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Helm 차트 임시 파일
+charts/
+*.tgz
+
+# Docker 임시 파일
+.dockerignore.bak
+
+# 기타 임시 파일
+flarectl
+*.orig

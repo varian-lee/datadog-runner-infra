@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-generator
+  labels:
+    app: load-generator
+    tier: monitoring
+    tags.datadoghq.com/env: demo
+    tags.datadoghq.com/service: load-generator
+    tags.datadoghq.com/version: "0.1.0"
+spec:
+  replicas: 1  # 단일 인스턴스로 충분
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+        tags.datadoghq.com/env: demo
+        tags.datadoghq.com/service: load-generator
+        tags.datadoghq.com/version: "0.1.0"
+        admission.datadoghq.com/enabled: "true"
+      annotations:
+        # Datadog 로그 수집을 위한 애노테이션
+        ad.datadoghq.com/load-generator.logs: '[{"source":"python","service":"load-generator"}]'
+        admission.datadoghq.com/python-lib.version: latest
+    spec:
+      containers:
+      - name: load-generator
+        image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/load-generator:latest
+        imagePullPolicy: Always
+        
+        # 환경변수 설정
+        env:
+        - name: BASE_URL
+          value: "http://frontend-svc"  # 클러스터 내부 프론트엔드 서비스
+        - name: INTERVAL_SECONDS
+          value: "30"                   # 30초마다 실행
+        - name: DD_LOGS_INJECTION
+          value: "true"
+        - name: DD_TRACE_ENABLED
+          value: "true"
+        - name: DD_TRACE_PROPAGATION_STYLE_INJECT
+          value: "datadog,tracecontext"
+        - name: DD_TRACE_PROPAGATION_STYLE_EXTRACT
+          value: "datadog,tracecontext"
+        - name: DD_AGENT_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: DD_TRACE_AGENT_URL
+          value: "http://$(DD_AGENT_HOST):8126"
+        
+        # 리소스 제한 (가벼운 작업이므로 최소한)
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        
+        # 단순한 파일 기반 헬스체크 (Python 애플리케이션 존재 확인)
+        livenessProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /app/app.py
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 2
+          failureThreshold: 3
+        
+        # 빠른 시작 준비 확인 (애플리케이션 파일 존재)
+        readinessProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /app/app.py
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 1
+
+      # 재시작 정책
+      restartPolicy: Always
+      
+      # 노드 선택 (선택사항)
+      # nodeSelector:
+      #   kubernetes.io/arch: amd64

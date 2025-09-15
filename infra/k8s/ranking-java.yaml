@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: ranking-java
+  labels:
+    tags.datadoghq.com/env: demo
+    tags.datadoghq.com/service: ranking-java
+    tags.datadoghq.com/version: "0.1.0"
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: ranking-java } }
+  template:
+    metadata:
+      labels: 
+        app: ranking-java
+        tags.datadoghq.com/env: demo
+        tags.datadoghq.com/service: ranking-java
+        tags.datadoghq.com/version: "0.1.0"
+        admission.datadoghq.com/enabled: "true"
+      annotations:
+        ad.datadoghq.com/ranking-java.logs: |
+          [{"source":"java","service":"ranking-java"}]
+        admission.datadoghq.com/java-lib.version: latest
+    spec:
+      containers:
+      - name: ranking-java
+        image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/ranking-java:latest
+        ports:
+        - containerPort: 8081
+        env:
+        - {name: REDIS_DSN, value: "redis://redis:6379/0"}
+        - {name: DD_LOGS_INJECTION, value: "true"}
+        - {name: DD_APPSEC_ENABLED, value: "true"}
+        - {name: DD_TRACE_ENABLED, value: "true"}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ranking-java-svc }
+spec:
+  selector: { app: ranking-java }
+  ports: [{ port: 8081, targetPort: 8081 }]

@@ -1,0 +1,96 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    volumes:
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  auth-python-svc:
+    build: ./services/auth-python
+    restart: unless-stopped
+    environment:
+      PG_DSN: postgresql://app:app@postgres:5432/app
+      REDIS_DSN: redis://redis:6379/0
+      DD_SERVICE: auth-python
+      DD_ENV: demo
+      DD_VERSION: 0.1.0
+      DD_LOGS_INJECTION: "true"
+      DD_APPSEC_ENABLED: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+
+  chat-node-svc:
+    build: ./services/chat-node
+    restart: unless-stopped
+    environment:
+      AMQP_URL: amqp://rabbitmq:5672
+      DD_SERVICE: chat-node
+      DD_ENV: demo
+      DD_VERSION: 0.1.0
+    ports:
+      - "8080:8080"
+    depends_on:
+      - rabbitmq
+
+  ranking-java-svc:
+    build: ./services/ranking-java
+    restart: unless-stopped
+    environment:
+      REDIS_DSN: redis://redis:6379/0
+      DD_SERVICE: ranking-java
+      DD_ENV: demo
+      DD_VERSION: 0.1.0
+      DD_LOGS_INJECTION: "true"
+      DD_APPSEC_ENABLED: "true"
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+
+  load-generator:
+    build: ./services/load-generator
+    restart: unless-stopped
+    environment:
+      BASE_URL: http://frontend:80
+      INTERVAL_SECONDS: 30
+      DD_SERVICE: load-generator
+      DD_ENV: demo
+      DD_VERSION: 0.1.0
+      DD_LOGS_INJECTION: "true"
+    depends_on:
+      - frontend
+
+  frontend:
+    build: ./frontend-react
+    environment:
+      VITE_DD_RUM_APP_ID: ""
+      VITE_DD_RUM_CLIENT_TOKEN: ""
+      VITE_DD_SITE: datadoghq.com
+      VITE_DD_ENV: demo
+      VITE_APP_VERSION: 0.1.0
+    ports:
+      - "5173:80"
+    depends_on:
+      - auth-python-svc
+      - chat-node-svc
+      - ranking-java-svc

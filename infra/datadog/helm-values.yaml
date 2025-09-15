@@ -1,0 +1,71 @@
+# 📊 Datadog Agent Helm Values - Kubernetes 클러스터 통합 모니터링
+# 
+# 주요 기능:
+# - APM: 분산 트레이싱 (모든 마이크로서비스)
+# - 로그: 컨테이너 로그 수집 및 파싱
+# - 메트릭: 시스템, 애플리케이션, 커스텀 메트릭
+# - Autodiscovery: 자동 서비스 발견 및 설정
+# - OpenMetrics: Prometheus 메트릭 수집 (KrakenD)
+# 
+# 설정 히스토리:
+# - 처음 datadog.env: demo 로 설정했다가 Helm template 오류 발생하여 tags 방식으로 변경
+datadog:
+  site: datadoghq.com
+  apiKeyExistingSecret: datadog-secret
+  # logLevel: debug               # DEBUG 로그 활성화 시 주석 해제 (환경변수 DD_LOG_LEVEL과 함께 사용)
+  tags:
+    - env:demo                    # 환경 태그 (서비스들과 일치)
+  logs:
+    enabled: true
+    containerCollectAll: true     # 모든 컨테이너 로그 수집
+  apm:
+    enabled: true                 # Application Performance Monitoring
+  processAgent:
+    enabled: true                 # 프로세스 모니터링
+  networkMonitoring:
+    enabled: true                 # 네트워크 모니터링
+  dbm:
+    enabled: true                 # Database Monitoring
+  kubeStateMetricsEnabled: true   # K8s 상태 메트릭
+  
+  # Kubelet Integration 커스터마이제이션
+  # kubernetes.kubelet.pod.start.duration.count 메트릭 수집을 위해 Python check 사용
+  kubelet:
+    coreCheckEnabled: false       # Go 코어 체크 비활성화, Python 체크 활성화
+  
+  # 동료 추천으로 추가된 완전한 kubelet confd 설정
+  # confd 사용 시 기존 설정을 완전히 대체하므로 필수 설정들을 모두 포함
+  confd:
+    kubelet.yaml: |-
+      ad_identifiers:             # Autodiscovery 식별자 (필수)
+        - _kubelet
+      init_config: null           # 초기화 설정 (필수)
+      instances:
+        - min_collection_interval: 20           # 20초 간격으로 메트릭 수집
+          send_distribution_buckets: true       # 히스토그램 버킷을 분포로 전송
+          # 참고: send_distribution_buckets 활성화 시 일부 duration 메트릭이 사라지는 이슈 존재
+
+# Agent 컨테이너 설정
+agents:
+  containers:
+    agent:
+      env:
+        # 로컬이 아닌 트래픽으로부터의 APM 트레이스 수신 허용
+        - name: DD_APM_NON_LOCAL_TRAFFIC
+          value: "true"
+        # 로컬이 아닌 소스로부터의 DogStatsD 메트릭 수신 허용  
+        - name: DD_DOGSTATSD_NON_LOCAL_TRAFFIC
+          value: "true"
+        # 참고: DEBUG 로그레벨 설정 시 두 가지 모두 필요했음 (단일 설정으로는 불충분했었음.)
+        # 1) Helm 차트 레벨: logLevel: debug 
+        # 2) 환경 변수 레벨: DD_LOG_LEVEL: "debug"
+        # Flare 파일 생성 후 분석 완료, 현재는 INFO 레벨로 되돌림
+        # - name: DD_LOG_LEVEL
+        #   value: "debug"
+
+# 클러스터 Agent 활성화 - 클러스터 레벨 메트릭 수집
+clusterAgent:
+  enabled: true
+  admissionController:
+    enabled: true                 # Admission Controller 활성화
+    mutateUnlabelled: false       # 라벨이 없는 Pod는 수정하지 않음

@@ -1,0 +1,69 @@
+# ALB Ingress Controller를 통한 외부 접근 설정
+# CloudFront + ALB 구성으로 전 세계 HTTPS 접근과 회사 보안 정책 준수를 동시에 달성
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: runner-ingress
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    
+    # CloudFront와 ALB 간 SSL 리다이렉트 충돌 해결을 위해 HTTP만 사용
+    # 이전: '[{"HTTP":80},{"HTTPS":443}]' + ssl-redirect 설정으로 무한 리다이렉트 발생
+    # 현재: CloudFront에서 HTTPS 종료, ALB는 HTTP(80)만 처리
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    
+    # Security Group 관리 비활성화 - CloudFront Managed Prefix List 규칙 보존
+    # "true"로 설정 시 ALB Controller가 Security Group을 완전히 관리하여 
+    # 수동으로 추가한 CloudFront Prefix List 규칙(pl-22a6434b)이 삭제될 위험
+    alb.ingress.kubernetes.io/manage-backend-security-group-rules: "false"
+    
+    # 이전에 사용했던 설정들 (현재는 제거됨):
+    # - alb.ingress.kubernetes.io/certificate-arn: ACM 인증서 (CloudFront에서 처리)
+    # - alb.ingress.kubernetes.io/ssl-redirect: '443' (무한 리다이렉트 원인)
+    # - alb.ingress.kubernetes.io/inbound-cidrs: 211.234.207.143/32 (CloudFront Prefix List로 대체)
+    
+    # WebSocket 지원을 위한 설정 - 채팅 서비스 연결 안정성 개선
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=300      # 5분 idle timeout
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30  # 빠른 deregistration
+spec:
+  rules:
+  # Cloudflare DNS에 CNAME 레코드로 연결된 도메인
+  # CloudFront Distribution의 Alternate Domain Names에도 등록됨
+  - host: game.the-test.work
+    http:
+      paths:
+      # KrakenD API Gateway를 통한 백엔드 API 라우팅
+      # 모든 REST API 요청은 KrakenD Gateway가 통합 처리
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway-svc    # KrakenD API Gateway (auth, score 등)
+            port: { number: 8080 }
+      
+      # 랭킹 API도 KrakenD Gateway를 통해 라우팅
+      - path: /rankings
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway-svc    # KrakenD API Gateway (ranking 서비스 연결)
+            port: { number: 8080 }
+      
+      # 실시간 채팅 WebSocket 라우팅 (KrakenD 우회 - 직접 연결)
+      # WebSocket은 KrakenD에서 지원하지 않으므로 직접 chat-node 서비스로 연결
+      - path: /chat
+        pathType: Prefix
+        backend:
+          service:
+            name: chat-node-svc      # Node.js 기반 WebSocket 채팅 서비스
+            port: { number: 8080 }
+      
+      # 프론트엔드 정적 파일 및 SPA 라우팅 (게임, 로그인, 회원가입, 채팅 페이지)
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-svc       # React + Nginx 기반 프론트엔드 서비스
+            port: { number: 80 }
