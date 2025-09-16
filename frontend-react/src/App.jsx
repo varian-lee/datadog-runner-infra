@@ -8,6 +8,7 @@ import Game from './pages/Game.jsx';
 import Ranking from './pages/Ranking.jsx';
 import Chat from './pages/Chat.jsx';
 import { useEffect, useState } from 'react';
+import { setRumUser, clearRumUser } from './lib/rum';
 
 export default function App() {
   // 인증 상태 관리
@@ -27,10 +28,14 @@ export default function App() {
         setAuthed(true);
         // 기존: 고정된 사용자 정보 → 현재: 실제 로그인한 사용자 ID 표시
         setCurrentUser(data.user_id || '사용자');
+        // 🔐 앱 초기화 시 RUM에 사용자 정보 설정
+        setRumUser(data);
       })
       .catch(() => {
         setAuthed(false);
         setCurrentUser('');
+        // 🧹 세션 없을 시 RUM 사용자 정보 초기화
+        clearRumUser();
       });
   }, []);
 
@@ -40,6 +45,8 @@ export default function App() {
     setAuthed(false);
     setCurrentUser('');
     setShowSignup(false); // 로그인 화면으로 리셋
+    // 🧹 로그아웃 시 RUM 사용자 정보 초기화
+    clearRumUser();
   };
 
   // 로그인/회원가입 성공 후 처리 - 사용자 정보 갱신
@@ -50,10 +57,14 @@ export default function App() {
       .then(data => {
         setAuthed(true);
         setCurrentUser(data.user_id || '사용자');
+        // 🔐 로그인 성공 시 RUM에 사용자 정보 설정
+        setRumUser(data);
       })
       .catch(() => {
         setAuthed(false);
         setCurrentUser('');
+        // 🧹 로그인 실패 시 RUM 사용자 정보 초기화
+        clearRumUser();
       });
   };
 
@@ -99,6 +110,7 @@ export default function App() {
                     placeholderInitials={currentUser?.charAt(0)?.toUpperCase() || '?'}
                     rounded 
                     className="ring-2 ring-white"
+                    data-dd-action-name="사용자 아바타 클릭"
                   />
                 }
               >

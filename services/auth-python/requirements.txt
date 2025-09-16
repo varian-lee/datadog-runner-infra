@@ -4,3 +4,4 @@ asyncpg==0.29.0
 redis==5.0.4
 ddtrace==2.8.7
 wrapt>=1.14.0
+structlog==23.2.0

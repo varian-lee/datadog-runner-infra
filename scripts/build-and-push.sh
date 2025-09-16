@@ -45,7 +45,7 @@ for SERVICE in "${SERVICES[@]}"; do
     aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION 2>/dev/null || \
     aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
     
-    # Docker 이미지 빌드 (EKS 호환을 위한 linux/amd64 플랫폼)
+    # Docker 이미지 빌드 (EKS 호환을 위한 linux/amd64 플랫폼, 캐시 활용으로 빠른 빌드)
     if [ "$SERVICE" = "frontend-react" ]; then
         docker buildx build --platform linux/amd64 -t $REPO_NAME:$VERSION ./frontend-react --load
     else

@@ -23,6 +23,51 @@ import redis.asyncio as aioredis
 #from ddtrace import patch_all; patch_all()  # Datadog APM 트레이싱
 import logging
 from starlette.middleware.cors import CORSMiddleware
+from ddtrace import tracer
+import structlog
+
+# Datadog 공식 방식: structlog로 trace correlation 설정
+def tracer_injection(logger, log_method, event_dict):
+    """Datadog trace correlation을 위한 processor"""
+    # 현재 tracer context에서 correlation ID 가져오기
+    event_dict.update(tracer.get_log_correlation_context())
+    return event_dict
+
+def add_message_field(logger, log_method, event_dict):
+    """event 필드를 message 필드로 이동"""
+    if 'event' in event_dict:
+        event_dict['message'] = event_dict['event']
+        # event 필드 삭제
+        del event_dict['event']
+    return event_dict
+
+# structlog 설정 - JSON 출력 + Datadog correlation
+structlog.configure(
+    processors=[
+        tracer_injection,
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        add_message_field,
+        structlog.processors.JSONRenderer()
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
+
+# 표준 logging도 structlog로 연결
+logging.basicConfig(
+    format="%(message)s",
+    stream=None,
+    level=logging.INFO,
+)
+
+# structlog logger 생성
+logger = structlog.get_logger()
 
 app = FastAPI(title="auth-python")
 # CORS 설정 - 프론트엔드에서 쿠키 기반 인증 및 RUM-APM 연결 허용
@@ -176,16 +221,27 @@ async def submit_score(inp: ScoreIn, req: Request):
     sid = req.cookies.get(COOKIE_NAME)
     if not sid:
         raise HTTPException(401)
+    
+    # 세션 확인 (Redis)
     r = await get_redis()
     uid = await r.get(f"session:{sid}")
-    if not uid:
-        await r.close()
-        raise HTTPException(401)
-    ts = int(time.time()*1000)
-    # Update best score only when higher
-    curr = await r.zscore("game:scores", uid)
-    if (curr is None) or (inp.score > float(curr)):
-        await r.zadd("game:scores", {uid: inp.score})
-        await r.hset(f"game:scores:best:{uid}", mapping={"score": inp.score, "ts": ts})
     await r.close()
+    if not uid:
+        raise HTTPException(401)
+    
+    # 점수 저장 (PostgreSQL)
+    pg = await get_pg()
+    try:
+        # 모든 점수를 기록 - ranking-java에서 MAX() 집계로 처리
+        await pg.execute(
+            "INSERT INTO scores (user_id, high_score) VALUES ($1, $2)", 
+            uid, inp.score
+        )
+        logger.info("점수 저장 완료", user_id=uid, score=inp.score)
+    except Exception as e:
+        logger.error("점수 저장 실패", error=str(e))
+        raise HTTPException(500, "점수 저장에 실패했습니다")
+    finally:
+        await pg.close()
+    
     return {"ok": True}

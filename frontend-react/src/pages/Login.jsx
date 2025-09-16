@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Card, Button, Label, TextInput, Alert } from 'flowbite-react';
+import { setRumUser } from '../lib/rum';
 
 export default function Login({ onLogin, onSwitchToSignup }) {
   const [id, setId] = useState('');
@@ -13,14 +14,40 @@ export default function Login({ onLogin, onSwitchToSignup }) {
     setLoading(true);
     
     try {
-      const r = await fetch('/api/auth/login', {
+      // 1. 로그인 시도
+      const loginResponse = await fetch('/api/auth/login', {
         method: 'POST',
         headers:{'Content-Type':'application/json'},
         credentials: 'include',
         body: JSON.stringify({ id, pw })
       });
-      if (r.ok) onLogin();
-      else setErr('로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.');
+      
+      if (loginResponse.ok) {
+        // 2. 로그인 성공 시 사용자 정보 가져오기
+        try {
+          const userResponse = await fetch('/api/session/me', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          
+          if (userResponse.ok) {
+            const userInfo = await userResponse.json();
+            // 3. Datadog RUM에 사용자 정보 설정 - 디버깅 추가
+            console.log('🔍 API 응답 원본:', userInfo);
+            console.log('🔍 DD_RUM 객체 상태:', window.DD_RUM ? '✅ 존재' : '❌ 없음');
+            console.log('🔍 setUser 함수:', window.DD_RUM?.setUser ? '✅ 존재' : '❌ 없음');
+            
+            setRumUser(userInfo);
+            console.log('🔐 로그인 성공 & RUM User 설정 시도:', userInfo);
+          }
+        } catch (userError) {
+          console.warn('⚠️ 사용자 정보 조회 실패 (로그인은 성공):', userError);
+        }
+        
+        onLogin();
+      } else {
+        setErr('로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.');
+      }
     } catch (error) {
       setErr('서버와의 연결에 문제가 발생했습니다.');
     } finally {

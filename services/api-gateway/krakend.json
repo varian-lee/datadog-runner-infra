@@ -479,6 +479,7 @@
       "endpoint": "/rankings/{path}",
       "method": "GET",
       "output_encoding": "no-op",
+      "input_query_strings": ["limit"],
       "backend": [
         {
           "url_pattern": "/rankings/{path}",
@@ -488,7 +489,19 @@
           "host": ["ranking-java-svc:8081"],
           "disable_host_sanitize": false
         }
-      ]
+      ],
+      "extra_config": {
+        "qos/http-cache": {
+          "disabled": true
+        },
+        "backend/http": {
+          "max_idle_connections": 2,
+          "max_idle_connections_per_host": 1,
+          "_comment_connections": "Connection Pool 제한 - ranking-java HikariCP(1개) 고갈로 순수한 대기 큐 효과 테스트",
+          "disable_compression": false,
+          "disable_keep_alives": false
+        }
+      }
     },
     {
       "endpoint": "/api/status",

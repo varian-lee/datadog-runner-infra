@@ -20,7 +20,7 @@ spec:
       annotations:
         ad.datadoghq.com/auth-python.logs: |
           [{"source":"python","service":"auth-python"}]
-        admission.datadoghq.com/python-lib.version: latest
+        admission.datadoghq.com/python-lib.version: 3.10.0
     spec:
       containers:
       - name: auth-python
@@ -34,6 +34,10 @@ spec:
         - {name: DD_APPSEC_ENABLED, value: "true"}
         - {name: DD_TRACE_ENABLED, value: "true"}
         - {name: DD_AGENT_HOST, valueFrom: {fieldRef: {fieldPath: status.hostIP}}}
+        # Dynamic Instrumentation 활성화 - 런타임 계측
+        - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
+        # Exception Replay 활성화 - 예외 상태 기록
+        - {name: DD_EXCEPTION_REPLAY_ENABLED, value: "true"}
         readinessProbe: { httpGet: { path: "/auth/logout", port: 8000 }, initialDelaySeconds: 5 }
 ---
 apiVersion: v1

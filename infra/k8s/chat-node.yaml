@@ -33,6 +33,8 @@ spec:
         - {name: DD_APPSEC_ENABLED, value: "true"}
         - {name: DD_TRACE_ENABLED, value: "true"}
         - {name: DD_AGENT_HOST, valueFrom: {fieldRef: {fieldPath: status.hostIP}}}
+        # Dynamic Instrumentation 활성화 - 런타임 계측
+        - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
 ---
 apiVersion: v1
 kind: Service

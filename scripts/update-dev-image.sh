@@ -135,16 +135,14 @@ cleanup_on_failure() {
 trap cleanup_on_failure EXIT
 
 # 동적 태그 생성 시스템 - 매번 고유한 태그로 캐시 무력화
-# Git 사용 가능 시: git-{commit_hash} (추적 가능)
-# Git 없을 시: dev-{timestamp} (개발 환경용)
+# 개발 환경에서는 항상 타임스탬프 사용으로 확실한 이미지 업데이트 보장
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+VERSION="dev-${TIMESTAMP}"
+
+# Git 정보는 로그용으로만 사용
 if git rev-parse --git-dir > /dev/null 2>&1; then
-    # Git이 있으면 커밋 해시 사용 - 코드 버전 추적 가능
     GIT_HASH=$(git rev-parse --short HEAD)
-    VERSION="git-${GIT_HASH}"
-else
-    # Git이 없으면 타임스탬프 사용 - 빠른 개발 사이클 지원
-    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-    VERSION="dev-${TIMESTAMP}"
+    echo "📋 Git 커밋: $GIT_HASH (참고용)"
 fi
 
 echo "🏷️  동적 생성된 고유 태그: $VERSION"
@@ -201,8 +199,9 @@ case $SERVICE in
         ;;
 esac
 
-# Docker 빌드 - 캐시 활용으로 개발 속도 향상
+# Docker 빌드 - 캐시 활용으로 빠른 개발 속도 향상
 # BUILDKIT_INLINE_CACHE=1: 빌드 캐시를 이미지에 포함하여 재빌드 시 활용
+# 타임스탬프 기반 태깅으로 Kubernetes에서 새로운 이미지로 인식
 docker buildx build \
     --platform linux/amd64 \
     --build-arg BUILDKIT_INLINE_CACHE=1 \

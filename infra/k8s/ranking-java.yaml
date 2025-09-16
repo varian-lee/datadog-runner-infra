@@ -32,6 +32,10 @@ spec:
         - {name: DD_LOGS_INJECTION, value: "true"}
         - {name: DD_APPSEC_ENABLED, value: "true"}
         - {name: DD_TRACE_ENABLED, value: "true"}
+        # Dynamic Instrumentation 활성화 - 런타임 계측
+        - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
+        # Exception Replay 활성화 - 예외 상태 기록
+        - {name: DD_EXCEPTION_REPLAY_ENABLED, value: "true"}
 ---
 apiVersion: v1
 kind: Service

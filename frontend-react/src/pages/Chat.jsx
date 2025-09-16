@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Card, Button, TextInput, Badge, Avatar } from 'flowbite-react';
+import { rumAction } from '../lib/rum';
 
 export default function Chat(){
   const [msgs, setMsgs] = useState([]);
@@ -21,6 +22,9 @@ export default function Chat(){
 
   // Get current user info
   useEffect(() => {
+    // 🎯 퍼널 추적: 채팅 페이지 방문
+    rumAction('page_visited', { page: 'chat' });
+    
     setUserLoading(true);
     fetch('/api/session/me', { credentials: 'include' })
       .then(r => {
@@ -60,6 +64,9 @@ export default function Chat(){
       setIsConnected(true);
       // 연결 즉시 사용자 입장 메시지 전송
       if (currentUser) {
+        // 💬 채팅방 입장 - RUM 추적
+        rumAction('chat_room_joined', { user: currentUser });
+        
         ws.send(JSON.stringify({ 
           type: 'user_join', 
           user: currentUser 
@@ -74,18 +81,38 @@ export default function Chat(){
       // 사용자 목록 업데이트 메시지 처리
       if (data.type === 'user_list_update') {
         setConnectedUsers(data.userList || []);
+        // 💬 사용자 목록 업데이트 - RUM 추적
+        rumAction('chat_user_list_updated', { connectedUsers: data.userList?.length || 0 });
       } else {
         // 일반 채팅 메시지 (type === 'chat' 또는 기타)
         setMsgs(m => [...m, data]);
+        // 💬 메시지 수신 - RUM 추적 (본인 메시지가 아닌 경우에만)
+        if (data.user !== currentUser) {
+          rumAction('chat_message_received', { 
+            fromUser: data.user,
+            messageLength: data.text?.length || 0
+          });
+        }
       }
     };
     
     return ()=> ws.close();
   }, [userLoading, currentUser]); // userLoading과 currentUser 변경 시 재연결
 
-  function send(e){
+  function send(e, inputMethod = 'unknown'){
     e?.preventDefault();
     if (!text.trim()) return;
+    
+    // 💬 채팅 전송 - RUM 추적 (입력 방법 포함)
+    const messageData = {
+      messageLength: text.trim().length,
+      messagePreview: text.trim().substring(0, 20) + (text.trim().length > 20 ? '...' : ''), // 처음 20자만
+      user: currentUser,
+      isConnected: isConnected,
+      inputMethod: inputMethod // 입력 방법 추가 (send_button, enter_key 등)
+    };
+    rumAction('chat_message_sent', messageData);
+    
     wsRef.current?.send(JSON.stringify({ text, user: currentUser }));
     setText('');
   }
@@ -93,7 +120,8 @@ export default function Chat(){
   function handleKeyPress(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      send();
+      // 💬 엔터키로 채팅 전송
+      send(e, 'enter_key');
     }
   }
 
@@ -182,6 +210,7 @@ export default function Chat(){
                       rounded 
                       size="sm"
                       className={`ring-2 ${isMyMessage ? 'ring-blue-200' : 'ring-purple-200'}`}
+                      data-dd-action-name="채팅 메시지 작성자 아바타 클릭"
                     />
                     <div className="flex-1 min-w-0">
                       <div className={`flex items-center gap-2 mb-1 ${isMyMessage ? 'flex-row-reverse' : ''}`}>
@@ -229,6 +258,7 @@ export default function Chat(){
                       rounded 
                       size="xs"
                       className="ring-2 ring-green-200"
+                      data-dd-action-name="접속 사용자 아바타 클릭"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -248,7 +278,7 @@ export default function Chat(){
         </div>
 
         {/* 입력 영역 */}
-        <form onSubmit={send} className="flex gap-3 mt-2 md:mt-4">
+        <form onSubmit={(e) => send(e, 'send_button')} className="flex gap-3 mt-2 md:mt-4">
           <TextInput
             value={text}
             onChange={(e) => setText(e.target.value)}

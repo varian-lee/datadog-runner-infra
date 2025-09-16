@@ -1,5 +1,5 @@
 /**
- * 💬 Chat Service (Node.js WebSocket) - Datadog Runner 프로젝트
+ * Chat Service (Node.js WebSocket) - Datadog Runner 프로젝트
  * 
  * 실시간 채팅 마이크로서비스
  * - WebSocket: 실시간 양방향 통신

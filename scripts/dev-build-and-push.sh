@@ -27,7 +27,7 @@ build_service() {
     
     log_info "📦 $service 이미지 빌드 중..."
     
-    # 개발용: 변경된 파일만 감지해서 빌드
+    # 개발용: 캐시 활용으로 빠른 빌드, 타임스탬프 태깅으로 새로운 이미지 보장
     docker buildx build \
         --platform linux/amd64 \
         --build-arg BUILDKIT_INLINE_CACHE=1 \

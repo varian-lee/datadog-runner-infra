@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { rumAction } from '../lib/rum';
+import { rumAction, setGamePlayedStatus } from '../lib/rum';
 
 // HTML-based Datadog Runner for Session Replay DOM tracking
 export default function Game() {
@@ -31,11 +31,17 @@ export default function Game() {
   const GRAVITY = 0.8;        // 중력 (원래 값 유지)
   const JUMP_VELOCITY = -14;  // 점프 속도 (원래 값 유지)
 
-  // Load best score
+  // Load best score & initialize game state
   useEffect(() => {
     const savedBest = Number(localStorage.getItem("best") || 0);
     setBest(savedBest);
     bestRef.current = savedBest;
+    
+    // 🎮 페이지 로드 시 게임 플레이 상태 초기화
+    setGamePlayedStatus(false);
+    
+    // 🎯 퍼널 추적: 게임 페이지 방문
+    rumAction('page_visited', { page: 'game', previousBest: savedBest });
   }, []);
 
   // Update refs when state changes
@@ -45,6 +51,28 @@ export default function Game() {
   useEffect(() => { obstaclesRef.current = obstacles; }, [obstacles]);
   useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
   useEffect(() => { bestRef.current = best; }, [best]);
+
+  // 🎯 퍼널 추적: 게임 점수 마일스톤
+  useEffect(() => {
+    if (score <= 0 || !running) return;
+
+    const currentScore = Math.floor(score);
+    const milestones = [50, 100, 200, 500, 1000, 2000];
+    
+    for (const milestone of milestones) {
+      const storageKey = `milestone_${milestone}_reached`;
+      const hasReached = sessionStorage.getItem(storageKey);
+      
+      if (currentScore >= milestone && !hasReached) {
+        sessionStorage.setItem(storageKey, 'true');
+        rumAction('game_milestone', { 
+          milestone: `score_${milestone}`,
+          currentScore: currentScore,
+          isRunning: running
+        });
+      }
+    }
+  }, [score, running]);
 
   // Game over handler
   const handleGameOver = async () => {
@@ -65,12 +93,26 @@ export default function Game() {
 
     // Send score to backend
     try {
-      await fetch('/api/score', {
+      const response = await fetch('/api/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ score: finalScore })
       });
+      
+      if (response.ok) {
+        // 🏆 게임 완료 - RUM 추적
+        setGamePlayedStatus(true); // 점수 제출 성공 시 게임 완료로 마킹
+        
+        // 🎯 퍼널 추적: 게임 완료 정보 저장 (랭킹 확인 추적용)
+        sessionStorage.setItem('game_completed', JSON.stringify({
+          score: finalScore,
+          completedAt: Date.now(),
+          newBest: newBest > bestRef.current
+        }));
+        
+        console.log('🏆 게임 완료 & 점수 제출 성공:', finalScore);
+      }
     } catch (e) {
       console.error('Failed to save score:', e);
     }
@@ -85,7 +127,16 @@ export default function Game() {
     setScore(0);
     setDogPosition({ x: 80, y: 200, jumping: false, jumpCount: 0 });
     setObstacles([]);
+    
+    // 🎯 퍼널 추적: 마일스톤 초기화 (새 게임 시작)
+    const milestones = [50, 100, 200, 500, 1000, 2000];
+    milestones.forEach(milestone => {
+      sessionStorage.removeItem(`milestone_${milestone}_reached`);
+    });
+    
+    // 🎮 게임 시작 - RUM 추적
     rumAction('game_start');
+    setGamePlayedStatus(false); // 게임 시작했지만 아직 완료하지 않음
   };
 
   // Jump function
