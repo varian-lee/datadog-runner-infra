@@ -19,7 +19,6 @@ datadog:
   # apiKeyExistingSecret: datadog-secret
   apiKeyExistingSecret: datadog-secret-new
   # logLevel: debug               # DEBUG 로그 활성화 시 주석 해제 (환경변수 DD_LOG_LEVEL과 함께 사용)
-  # tag 먹이기.. DD_TAGS 환경변수를 저 아래에서 사용하면 이 부분이 안먹히는 것 같음.
   tags:
     - env:demo                    # 환경 태그 (서비스들과 일치)
     - testtag:testtag_value                    # 테스트 태그
@@ -28,14 +27,16 @@ datadog:
     enabled: true
     containerCollectAll: true     # 모든 컨테이너 로그 수집
   apm:
-    enabled: true                 # Application Performance Monitoring
+    enabled: false                 # Application Performance Monitoring
+    portEnabled: false       # TCP 포트 8126 비활성화
+    socketEnabled: false     # Unix socket 비활성화
   processAgent:
-    enabled: true                 # 프로세스 모니터링
+    enabled: false                 # 프로세스 모니터링
   networkMonitoring:
-    enabled: true                 # 네트워크 모니터링
+    enabled: false                 # 네트워크 모니터링
   dbm:
-    enabled: true                 # Database Monitoring
-  kubeStateMetricsEnabled: true   # K8s 상태 메트릭
+    enabled: false                 # Database Monitoring
+  kubeStateMetricsEnabled: false   # K8s 상태 메트릭
   
   # Kubelet Integration 커스터마이제이션
   # kubernetes.kubelet.pod.start.duration.count 메트릭 수집을 위해 Python check 사용
@@ -53,21 +54,30 @@ datadog:
           send_distribution_buckets: true       # 히스토그램 버킷을 분포로 전송
           # 참고: send_distribution_buckets 활성화 시 일부 duration 메트릭이 사라지는 이슈 존재
 
-# Agent 컨테이너 설정 - Dual Shipping 활성화 (기존 node selector 유지)
+# Agent 컨테이너 설정
 agents:
-  nodeSelector:
-    is-dd-apm: "true"                 # APM이 활성화된 노드에만 배포
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: is-dd-apm
+            operator: DoesNotExist    # is-dd-apm 라벨이 없는 노드 (APM 비활성화)
+
   containers:
     agent:
       env:
-        # 로컬이 아닌 트래픽으로부터의 APM 트레이스 수신 허용
+        # APM 완전 비활성화
+        - name: DD_APM_ENABLED
+          value: "false"
+        # 로컬이 아닌 트래픽으로부터의 APM 트레이스 수신 차단
         - name: DD_APM_NON_LOCAL_TRAFFIC
-          value: "true"
+          value: "false"
         # 로컬이 아닌 소스로부터의 DogStatsD 메트릭 수신 허용  
         - name: DD_DOGSTATSD_NON_LOCAL_TRAFFIC
-          value: "true"
+          value: "false"
         
-        # 🔄 Dual Shipping 설정 - 환경변수 방식
+        # 🔄 Dual Shipping 설정 - APM 제외하고 메트릭 + 로그만
         # 📊 메트릭 Dual Shipping
         - name: DD_ADDITIONAL_ENDPOINTS
           valueFrom:
@@ -83,17 +93,13 @@ agents:
             secretKeyRef:
               name: datadog-dual-shipping-secret
               key: logs
-        
-        # 🔍 APM Dual Shipping (필요시)
-        - name: DD_APM_ADDITIONAL_ENDPOINTS
-          valueFrom:
-            secretKeyRef:
-              name: datadog-dual-shipping-secret  
-              key: apm
 
-# 클러스터 Agent 활성화 - 클러스터 레벨 메트릭 수집
+# 기존 Cluster Agent 재사용
+existingClusterAgent:
+  join: true
+  serviceName: "datadog-standard-cluster-agent"        # Standard 배포의 Cluster Agent 서비스
+  tokenSecretName: "datadog-standard-cluster-agent"    # Standard 배포의 인증 토큰
+
+# Cluster Agent 중복 방지
 clusterAgent:
-  enabled: true
-  admissionController:
-    enabled: true                 # Admission Controller 활성화
-    mutateUnlabelled: false       # 라벨이 없는 Pod는 수정하지 않음
+  enabled: false

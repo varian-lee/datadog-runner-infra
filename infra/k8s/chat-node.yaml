@@ -1,6 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata: 
+metadata:
   name: chat-node
   labels:
     tags.datadoghq.com/env: demo
@@ -8,10 +8,10 @@ metadata:
     tags.datadoghq.com/version: "0.1.0"
 spec:
   replicas: 1
-  selector: { matchLabels: { app: chat-node } }
+  selector: {matchLabels: {app: chat-node}}
   template:
     metadata:
-      labels: 
+      labels:
         app: chat-node
         tags.datadoghq.com/env: demo
         tags.datadoghq.com/service: chat-node
@@ -23,22 +23,72 @@ spec:
         admission.datadoghq.com/js-lib.version: latest
     spec:
       containers:
-      - name: chat-node
-        image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/chat-node:latest
-        ports:
-        - containerPort: 8080
-        env:
-        - {name: AMQP_URL, value: "amqp://rabbitmq:5672"}
-        - {name: DD_LOGS_INJECTION, value: "true"}
-        - {name: DD_APPSEC_ENABLED, value: "true"}
-        - {name: DD_TRACE_ENABLED, value: "true"}
-        - {name: DD_AGENT_HOST, valueFrom: {fieldRef: {fieldPath: status.hostIP}}}
-        # Dynamic Instrumentation 활성화 - 런타임 계측
-        - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
+        - name: chat-node
+          image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/chat-node:latest
+          ports:
+            - containerPort: 8080
+          # resources:
+          #   requests:
+          #     memory: "4Mi"
+          #     cpu: "4m"
+          #   limits:
+          #     memory: "5Mi"
+          #     cpu: "5m"
+          # resources:
+          #   requests:
+          #     memory: "256Mi"
+          #     cpu: "250m"
+          #   limits:
+          #     memory: "512Mi"
+          #     cpu: "500m"
+          # livenessProbe:
+          #   httpGet:
+          #     path: /healtha
+          #     port: 8080
+          #   initialDelaySeconds: 3
+          #   periodSeconds: 1
+          #   timeoutSeconds: 1
+          #   failureThreshold: 1
+          # readinessProbe:
+          #   httpGet:
+          #     path: /healtha
+          #     port: 8080
+          #   initialDelaySeconds: 1
+          #   periodSeconds: 1
+          #   timeoutSeconds: 1
+          #   failureThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 1
+            timeoutSeconds: 1
+            failureThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 1
+            periodSeconds: 1
+            timeoutSeconds: 1
+            failureThreshold: 1
+          env:
+            - {name: AMQP_URL, value: "amqp://rabbitmq:5672"}
+            - {name: DD_LOGS_INJECTION, value: "true"}
+            - {name: DD_APPSEC_ENABLED, value: "true"}
+            - {name: DD_TRACE_ENABLED, value: "true"}
+            - {name: DD_AGENT_HOST, valueFrom: {fieldRef: {fieldPath: status.hostIP}}}
+            # Dynamic Instrumentation 활성화 - 런타임 계측
+            - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
+            - name: DD_GIT_COMMIT_SHA
+              value: d23876c53778f8ae98987b5492d9e51a8b453936
+            - name: DD_GIT_REPOSITORY_URL
+              value: https://github.com/varian-lee/datadog-runner-chat-node
 ---
 apiVersion: v1
 kind: Service
-metadata: { name: chat-node-svc }
+metadata: {name: chat-node-svc}
 spec:
-  selector: { app: chat-node }
-  ports: [{ port: 8080, targetPort: 8080 }]
+  selector: {app: chat-node}
+  ports: [{port: 8080, targetPort: 8080}]

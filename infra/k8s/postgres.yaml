@@ -11,12 +11,33 @@ data:
 ---
 apiVersion: apps/v1
 kind: Deployment
-metadata: { name: postgres }
+metadata: 
+  name: postgres
+  labels:
+    tags.datadoghq.com/env: demo
+    tags.datadoghq.com/service: postgres
+    tags.datadoghq.com/version: "15.0"
 spec:
   replicas: 1
   selector: { matchLabels: { app: postgres } }
   template:
-    metadata: { labels: { app: postgres } }
+    metadata: 
+      labels: 
+        app: postgres
+        # Datadog 태그들
+        tags.datadoghq.com/env: demo
+        tags.datadoghq.com/service: postgres
+        tags.datadoghq.com/version: "15.0"
+        # 커스텀 태그들
+        database-type: "relational"
+        tier: "data"
+        component: "database"
+      annotations:
+        # Datadog 로그 수집 설정
+        ad.datadoghq.com/postgres.logs: |
+          [{"source":"postgresql","service":"postgres"}]
+        # 추가 태그 설정
+        ad.datadoghq.com/tags: '{"db_type": "postgresql", "storage_tier": "persistent"}'
     spec:
       containers:
       - name: postgres

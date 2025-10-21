@@ -1,17 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata: 
+metadata:
   name: ranking-java
   labels:
     tags.datadoghq.com/env: demo
     tags.datadoghq.com/service: ranking-java
     tags.datadoghq.com/version: "0.1.0"
 spec:
-  replicas: 1
-  selector: { matchLabels: { app: ranking-java } }
+  replicas: 2 # 모든 노드에서 실행 (2개 노드)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1 # 한 번에 1개 pod 교체 허용
+      maxSurge: 0 # 추가 pod 생성 금지 (AntiAffinity 때문)
+  selector: {matchLabels: {app: ranking-java}}
   template:
     metadata:
-      labels: 
+      labels:
         app: ranking-java
         tags.datadoghq.com/env: demo
         tags.datadoghq.com/service: ranking-java
@@ -22,24 +27,50 @@ spec:
           [{"source":"java","service":"ranking-java"}]
         admission.datadoghq.com/java-lib.version: latest
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - ranking-java
+              topologyKey: kubernetes.io/hostname
       containers:
-      - name: ranking-java
-        image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/ranking-java:latest
-        ports:
-        - containerPort: 8081
-        env:
-        - {name: REDIS_DSN, value: "redis://redis:6379/0"}
-        - {name: DD_LOGS_INJECTION, value: "true"}
-        - {name: DD_APPSEC_ENABLED, value: "true"}
-        - {name: DD_TRACE_ENABLED, value: "true"}
-        # Dynamic Instrumentation 활성화 - 런타임 계측
-        - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
-        # Exception Replay 활성화 - 예외 상태 기록
-        - {name: DD_EXCEPTION_REPLAY_ENABLED, value: "true"}
+        - name: ranking-java
+          image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/ranking-java:latest
+          ports:
+            - containerPort: 8081
+          env:
+            - name: REDIS_DSN
+              value: "redis://redis:6379/0"
+            - name: DD_LOGS_INJECTION
+              value: "true"
+            - name: DD_APPSEC_ENABLED
+              value: "true"
+            - name: DD_TRACE_ENABLED
+              value: "true"
+            # Dynamic Instrumentation 활성화 - 런타임 계측
+            - name: DD_DYNAMIC_INSTRUMENTATION_ENABLED
+              value: "true"
+            # Exception Replay 활성화 - 예외 상태 기록
+            - name: DD_EXCEPTION_REPLAY_ENABLED
+              value: "true"
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: DD_TAGS
+              value: "pod_name:$(MY_POD_NAME)"
+            - name: DD_GIT_COMMIT_SHA
+              value: b7dec2e8d71312684828269203f9cf8ad9a5683b
+            - name: DD_GIT_REPOSITORY_URL
+              value: https://github.com/varian-lee/datadog-runner-ranking-java
 ---
 apiVersion: v1
 kind: Service
-metadata: { name: ranking-java-svc }
+metadata: {name: ranking-java-svc}
 spec:
-  selector: { app: ranking-java }
-  ports: [{ port: 8081, targetPort: 8081 }]
+  selector: {app: ranking-java}
+  ports: [{port: 8081, targetPort: 8081}]

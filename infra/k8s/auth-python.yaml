@@ -1,6 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata: 
+metadata:
   name: auth-python
   labels:
     tags.datadoghq.com/env: demo
@@ -8,10 +8,10 @@ metadata:
     tags.datadoghq.com/version: "0.1.0"
 spec:
   replicas: 1
-  selector: { matchLabels: { app: auth-python } }
+  selector: {matchLabels: {app: auth-python}}
   template:
     metadata:
-      labels: 
+      labels:
         app: auth-python
         tags.datadoghq.com/env: demo
         tags.datadoghq.com/service: auth-python
@@ -23,26 +23,30 @@ spec:
         admission.datadoghq.com/python-lib.version: 3.10.0
     spec:
       containers:
-      - name: auth-python
-        image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/auth-python:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - {name: PG_DSN,      value: "postgresql://app:app@postgres:5432/app"}
-        - {name: REDIS_DSN,   value: "redis://redis:6379/0"}
-        - {name: DD_LOGS_INJECTION, value: "true"}
-        - {name: DD_APPSEC_ENABLED, value: "true"}
-        - {name: DD_TRACE_ENABLED, value: "true"}
-        - {name: DD_AGENT_HOST, valueFrom: {fieldRef: {fieldPath: status.hostIP}}}
-        # Dynamic Instrumentation 활성화 - 런타임 계측
-        - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
-        # Exception Replay 활성화 - 예외 상태 기록
-        - {name: DD_EXCEPTION_REPLAY_ENABLED, value: "true"}
-        readinessProbe: { httpGet: { path: "/auth/logout", port: 8000 }, initialDelaySeconds: 5 }
+        - name: auth-python
+          image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/auth-python:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - {name: PG_DSN, value: "postgresql://app:app@postgres:5432/app"}
+            - {name: REDIS_DSN, value: "redis://redis:6379/0"}
+            - {name: DD_LOGS_INJECTION, value: "true"}
+            - {name: DD_APPSEC_ENABLED, value: "true"}
+            - {name: DD_TRACE_ENABLED, value: "true"}
+            - {name: DD_AGENT_HOST, valueFrom: {fieldRef: {fieldPath: status.hostIP}}}
+            # Dynamic Instrumentation 활성화 - 런타임 계측
+            - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
+            # Exception Replay 활성화 - 예외 상태 기록
+            - {name: DD_EXCEPTION_REPLAY_ENABLED, value: "true"}
+            - name: DD_GIT_COMMIT_SHA
+              value: 169a6a476afe5d2d3e1c4f2f0e4e47c0583a2927
+            - name: DD_GIT_REPOSITORY_URL
+              value: https://github.com/varian-lee/datadog-runner-auth-python
+          readinessProbe: {httpGet: {path: "/auth/logout", port: 8000}, initialDelaySeconds: 5}
 ---
 apiVersion: v1
 kind: Service
-metadata: { name: auth-python-svc }
+metadata: {name: auth-python-svc}
 spec:
-  selector: { app: auth-python }
-  ports: [{ port: 8000, targetPort: 8000 }]
+  selector: {app: auth-python}
+  ports: [{port: 8000, targetPort: 8000}]

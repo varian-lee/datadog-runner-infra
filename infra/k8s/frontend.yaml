@@ -1,25 +1,30 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata: { name: frontend }
+metadata: {name: frontend}
 spec:
   replicas: 1
-  selector: { matchLabels: { app: frontend } }
+  selector: {matchLabels: {app: frontend}}
   template:
     metadata:
-      labels: { app: frontend }
+      labels: {app: frontend}
       annotations:
         ad.datadoghq.com/nginx.logs: |
           [{"source":"nginx","service":"frontend"}]
     spec:
       containers:
-      - name: frontend
-        image: yourrepo/frontend-react:0.1.0
-        ports:
-        - containerPort: 80
+        - name: frontend
+          image: yourrepo/frontend-react:0.1.0
+          ports:
+            - containerPort: 80
+          env:
+            - name: DD_GIT_COMMIT_SHA
+              value: 28035da5ffe24ac6275d85b4d575f8f381adf178
+            - name: DD_GIT_REPOSITORY_URL
+              value: https://github.com/varian-lee/datadog-runner-frontend
 ---
 apiVersion: v1
 kind: Service
-metadata: { name: frontend-svc }
+metadata: {name: frontend-svc}
 spec:
-  selector: { app: frontend }
-  ports: [{ port: 80, targetPort: 80 }]
+  selector: {app: frontend}
+  ports: [{port: 80, targetPort: 80}]
