@@ -1,0 +1,224 @@
+# ============================================================================
+# 🏗️ Infrastructure - K8s 매니페스트 적용 워크플로우
+# ============================================================================
+# infra/k8s/*.yaml 변경 시 자동으로 kubectl apply + rollout restart
+
+name: 🏗️ Apply K8s Manifests
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: '적용할 서비스 (또는 all)'
+        required: true
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - ranking-java
+          - auth-python
+          - chat-node
+          - frontend
+          - api-gateway
+          - load-generator
+
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/k8s/**'
+
+concurrency:
+  group: apply-manifests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ap-northeast-2
+  EKS_CLUSTER_NAME: datadog-runner-cluster
+
+jobs:
+  detect-changes:
+    name: 🔍 Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 🔍 Detect changed manifests
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.service }}" = "all" ]; then
+              SERVICES='["ranking-java","auth-python","chat-node","frontend","api-gateway","load-generator"]'
+            else
+              SERVICES='["${{ github.event.inputs.service }}"]'
+            fi
+          else
+            # Push 이벤트: 변경된 파일 감지
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'infra/k8s/*.yaml' || echo "")
+            
+            SERVICES="[]"
+            for file in $CHANGED_FILES; do
+              SERVICE=$(basename "$file" .yaml)
+              if [ "$SERVICE" != "" ]; then
+                if [ "$SERVICES" = "[]" ]; then
+                  SERVICES="[\"$SERVICE\"]"
+                else
+                  SERVICES="${SERVICES%]},\"$SERVICE\"]"
+                fi
+              fi
+            done
+          fi
+          
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+          echo "📋 적용할 서비스: $SERVICES"
+
+  apply:
+    name: 🚀 Apply ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+      fail-fast: false
+    
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📋 Set info
+        id: info
+        run: |
+          echo "started_at=$(date +%s)" >> $GITHUB_OUTPUT
+          echo "manifest_path=infra/k8s/${{ matrix.service }}.yaml" >> $GITHUB_OUTPUT
+
+      - name: 📢 Slack - 적용 시작
+        uses: slackapi/slack-github-action@v1.25.0
+        continue-on-error: true
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🏗️ 매니페스트 적용 시작 - ${{ matrix.service }}",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {"type": "mrkdwn", "text": "*파일:*\n`${{ steps.info.outputs.manifest_path }}`"},
+                    {"type": "mrkdwn", "text": "*트리거:*\n`${{ github.actor }}`"}
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: github-actions-apply
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 🔧 Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: 🔗 Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: 🚀 Apply manifest & Restart pods
+        id: apply
+        run: |
+          MANIFEST="${{ steps.info.outputs.manifest_path }}"
+          SERVICE="${{ matrix.service }}"
+          
+          echo "📄 매니페스트 적용: $MANIFEST"
+          kubectl apply -f "$MANIFEST"
+          
+          echo "🔄 Pod 재시작: $SERVICE"
+          kubectl rollout restart deployment/$SERVICE
+          
+          echo "⏳ 롤아웃 완료 대기..."
+          kubectl rollout status deployment/$SERVICE --timeout=300s
+          
+          echo "✅ 완료!"
+
+      - name: 📊 Verify
+        run: |
+          echo "📊 배포 상태:"
+          kubectl get deployment ${{ matrix.service }} -o wide
+          echo ""
+          echo "📊 Pod 상태:"
+          kubectl get pods -l app=${{ matrix.service }}
+
+      - name: 📊 Calculate duration
+        if: always()
+        id: duration
+        run: |
+          START=${{ steps.info.outputs.started_at }}
+          END=$(date +%s)
+          DURATION=$((END - START))
+          MINUTES=$((DURATION / 60))
+          SECONDS=$((DURATION % 60))
+          echo "text=${MINUTES}분 ${SECONDS}초" >> $GITHUB_OUTPUT
+
+      - name: 📢 Slack - 적용 완료
+        if: always()
+        uses: slackapi/slack-github-action@v1.25.0
+        continue-on-error: true
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ job.status == 'success' && '✅ 매니페스트 적용 성공' || '❌ 매니페스트 적용 실패' }} - ${{ matrix.service }}",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {"type": "mrkdwn", "text": "*파일:*\n`${{ steps.info.outputs.manifest_path }}`"},
+                    {"type": "mrkdwn", "text": "*소요시간:*\n${{ steps.duration.outputs.text }}"}
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {"type": "plain_text", "text": "📋 Actions 로그", "emoji": true},
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
