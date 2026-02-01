@@ -5,9 +5,10 @@ metadata:
   labels:
     tags.datadoghq.com/env: demo
     tags.datadoghq.com/service: ranking-java
-    tags.datadoghq.com/version: "0.1.0"
+    tags.datadoghq.com/version: "0.1.7"
 spec:
-  replicas: 2 # 모든 노드에서 실행 (2개 노드)
+  replicas: 2
+  # replicas: 2 # 모든 노드에서 실행 (2개 노드)
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -20,14 +21,39 @@ spec:
         app: ranking-java
         tags.datadoghq.com/env: demo
         tags.datadoghq.com/service: ranking-java
-        tags.datadoghq.com/version: "0.1.0"
+        tags.datadoghq.com/version: "0.1.7"
         admission.datadoghq.com/enabled: "true"
       annotations:
         ad.datadoghq.com/ranking-java.logs: |
-          [{"source":"java","service":"ranking-java"}]
+          [{
+            "source": "java",
+            "service": "ranking-java",
+            "log_processing_rules": [
+              {
+                "type": "exclude_at_match",
+                "name": "exclude_step2_logs",
+                "pattern": "2단계"
+              },
+              {
+                "type": "exclude_truncated",
+                "name": "exclude_truncated_logs"
+              }
+            ]
+          }]
         admission.datadoghq.com/java-lib.version: latest
     spec:
+      # ================== 핵심 설정: Node Affinity (APM 전용 노드에만 배포) ==================
       affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  # 1. 특정 노드그룹에만 배포
+                  - key: eks.amazonaws.com/nodegroup
+                    operator: In
+                    values:
+                      - t4g-medium-apm-nodes
+        # ================== 기존 Pod Anti-Affinity 유지 ==================
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
@@ -45,11 +71,30 @@ spec:
           env:
             - name: REDIS_DSN
               value: "redis://redis:6379/0"
+            #########
+            # APM 전용 Trace Sampling Propagation 설정
+            - name: DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+              value: "restart"
+            #########
+            # APM 전용 Agent로 트레이스 전송 옵션
+            # DD_TRACE_AGENT_URL이 가장 우선순위가 높으므로 이것으로 명시
+            - name: DD_TRACE_AGENT_URL
+              value: "http://datadog-apm-agent.default.svc.cluster.local:8126"
+            - name: DD_AGENT_HOST
+              value: "datadog-apm-agent.default.svc.cluster.local"
+            - name: DD_TRACE_AGENT_PORT
+              value: "8126"
+            - name: DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+              value: "false"
+            #########
+            # APM 설정
             - name: DD_LOGS_INJECTION
               value: "true"
             - name: DD_APPSEC_ENABLED
               value: "true"
             - name: DD_TRACE_ENABLED
+              value: "true"
+            - name: DD_PROFILING_ENABLED
               value: "true"
             # Dynamic Instrumentation 활성화 - 런타임 계측
             - name: DD_DYNAMIC_INSTRUMENTATION_ENABLED
@@ -57,20 +102,42 @@ spec:
             # Exception Replay 활성화 - 예외 상태 기록
             - name: DD_EXCEPTION_REPLAY_ENABLED
               value: "true"
+            # Pod 정보
             - name: MY_POD_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             - name: DD_TAGS
-              value: "pod_name:$(MY_POD_NAME)"
+              value: "original_pod_name:$(MY_POD_NAME),original_node_name:$(MY_NODE_NAME),original_pod_ip:$(MY_POD_IP),original_host_ip:$(MY_HOST_IP),kihyun_test:true"
+            # - name: POD_IP # JMX용 IP 노출
+            #   valueFrom:
+            #     fieldRef:
+            #       fieldPath: status.podIP
+            # - name: JAVA_TOOL_OPTIONS
+            #   value: >-
+            #     -Djdk.attach.allowAttachSelf=true --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED -Dobj_name=qa-lgemp-backend-member-b2c -Dnet_collector_ip=qa-aic-scouter-server.lgemp-internal.com -Dtrace_interservice_enabled=true -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.port=9012 -Dcom.sun.management.jmxremote.rmi.port=9012 -Djava.rmi.server.hostname=$(POD_IP) -Dspring.jmx.enabled=true -Dspring.jmx.register-mbeans=true -Dspring.datasource.hikari.register-mbeans=true -Dserver.tomcat.mbeanregistry.enabled=true
+            # Git 메타데이터
             - name: DD_GIT_COMMIT_SHA
-              value: b7dec2e8d71312684828269203f9cf8ad9a5683b
+              value: ea3dbb33d82d95a37c82a67067a7d8789369d374
             - name: DD_GIT_REPOSITORY_URL
               value: https://github.com/varian-lee/datadog-runner-ranking-java
 ---
 apiVersion: v1
 kind: Service
-metadata: {name: ranking-java-svc}
+metadata:
+  name: ranking-java-svc
 spec:
   selector: {app: ranking-java}
   ports: [{port: 8081, targetPort: 8081}]
