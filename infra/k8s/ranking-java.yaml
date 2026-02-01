@@ -120,7 +120,7 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
             - name: DD_TAGS
-              value: "original_pod_name:$(MY_POD_NAME),original_node_name:$(MY_NODE_NAME),original_pod_ip:$(MY_POD_IP),original_host_ip:$(MY_HOST_IP),kihyun_test:true"
+              value: "original_pod_name:$(MY_POD_NAME),original_node_name:$(MY_NODE_NAME),original_pod_ip:$(MY_POD_IP),original_host_ip:$(MY_HOST_IP),kihyun_test2:true"
             # - name: POD_IP # JMX용 IP 노출
             #   valueFrom:
             #     fieldRef:
