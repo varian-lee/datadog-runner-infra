@@ -26,7 +26,7 @@ on:
     branches:
       - main
     paths:
-      - 'infra/k8s/**'
+      - 'infra/infra/k8s/**'
 
 concurrency:
   group: apply-manifests-${{ github.ref }}
@@ -59,7 +59,7 @@ jobs:
             fi
           else
             # Push 이벤트: 변경된 파일 감지
-            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'infra/k8s/*.yaml' || echo "")
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'infra/infra/k8s/*.yaml' || echo "")
             
             SERVICES="[]"
             for file in $CHANGED_FILES; do
@@ -99,7 +99,7 @@ jobs:
         id: info
         run: |
           echo "started_at=$(date +%s)" >> $GITHUB_OUTPUT
-          echo "manifest_path=infra/k8s/${{ matrix.service }}.yaml" >> $GITHUB_OUTPUT
+          echo "manifest_path=infra/infra/k8s/${{ matrix.service }}.yaml" >> $GITHUB_OUTPUT
 
       - name: 📢 Slack - 적용 시작
         uses: slackapi/slack-github-action@v1.25.0
