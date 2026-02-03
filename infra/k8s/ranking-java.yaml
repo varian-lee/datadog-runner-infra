@@ -28,7 +28,7 @@ spec:
           [{
             "source": "java",
             "service": "ranking-java",
-            "tag": "test_for_log_tagging:value",
+            "tags": ["test_for_log_tagging:value"],
             "log_processing_rules": [
               {
                 "type": "exclude_at_match",
