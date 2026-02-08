@@ -1,8 +1,26 @@
 CREATE TABLE IF NOT EXISTS users (
-  id       VARCHAR(64) PRIMARY KEY,
-  pw_hash  TEXT        NOT NULL
+  id            VARCHAR(64) PRIMARY KEY,
+  pw_hash       TEXT        NOT NULL,
+  customization JSONB       DEFAULT '{"bodyColor": "white", "hatCode": "none"}'::jsonb,
+  profile       JSONB       DEFAULT '{}'::jsonb
 );
 INSERT INTO users(id, pw_hash) VALUES ('demo', 'demo') ON CONFLICT DO NOTHING;
+
+-- 기존 users 테이블에 customization 컬럼 추가 (이미 있으면 무시)
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='customization') THEN
+    ALTER TABLE users ADD COLUMN customization JSONB DEFAULT '{"bodyColor": "white", "hatCode": "none"}'::jsonb;
+  END IF;
+END $$;
+
+-- 기존 users 테이블에 profile 컬럼 추가 (이미 있으면 무시)
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='profile') THEN
+    ALTER TABLE users ADD COLUMN profile JSONB DEFAULT '{}'::jsonb;
+  END IF;
+END $$;
 
 -- 🎮 게임 점수 테이블 (PostgreSQL 전용 랭킹 시스템)
 CREATE TABLE IF NOT EXISTS scores (
