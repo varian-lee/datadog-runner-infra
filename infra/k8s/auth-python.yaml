@@ -5,9 +5,14 @@ metadata:
   labels:
     tags.datadoghq.com/env: demo
     tags.datadoghq.com/service: auth-python
-    tags.datadoghq.com/version: "0.1.0"
+    tags.datadoghq.com/version: "0.1.2"
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1 # 한 번에 1개 pod 교체 허용
+      maxSurge: 0 # 추가 pod 생성 금지 (AntiAffinity 때문)
   selector: {matchLabels: {app: auth-python}}
   template:
     metadata:
@@ -15,19 +20,33 @@ spec:
         app: auth-python
         tags.datadoghq.com/env: demo
         tags.datadoghq.com/service: auth-python
-        tags.datadoghq.com/version: "0.1.0"
+        tags.datadoghq.com/version: "0.1.2"
         admission.datadoghq.com/enabled: "true"
       annotations:
         ad.datadoghq.com/auth-python.logs: |
           [{"source":"python","service":"auth-python"}]
         admission.datadoghq.com/python-lib.version: 3.10.0
     spec:
+      # ================== 핵심 설정: Node Affinity (APM 전용 노드에만 배포) ==================
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  # 1. 특정 노드그룹에만 배포
+                  - key: eks.amazonaws.com/nodegroup
+                    operator: In
+                    values:
+                      - t4g-medium-apm-nodes
+      # ==============================================================================
       containers:
         - name: auth-python
           image: 222066942551.dkr.ecr.ap-northeast-2.amazonaws.com/datadog-runner/auth-python:latest
           ports:
             - containerPort: 8000
           env:
+            - {name: DD_SERVICE, value: "auth-python"}
+            - {name: DD_ENV, value: "demo"}
             - {name: PG_DSN, value: "postgresql://app:app@postgres:5432/app"}
             - {name: REDIS_DSN, value: "redis://redis:6379/0"}
             - {name: DD_LOGS_INJECTION, value: "true"}
@@ -38,8 +57,27 @@ spec:
             - {name: DD_DYNAMIC_INSTRUMENTATION_ENABLED, value: "true"}
             # Exception Replay 활성화 - 예외 상태 기록
             - {name: DD_EXCEPTION_REPLAY_ENABLED, value: "true"}
+            # Pod 정보
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: DD_TAGS
+              value: "original_pod_name:$(MY_POD_NAME),original_node_name:$(MY_NODE_NAME),original_pod_ip:$(MY_POD_IP),original_host_ip:$(MY_HOST_IP)"
             - name: DD_GIT_COMMIT_SHA
-              value: 169a6a476afe5d2d3e1c4f2f0e4e47c0583a2927
+              value: 05e3c6d4819352e76450ff32df57c2748025221c
             - name: DD_GIT_REPOSITORY_URL
               value: https://github.com/varian-lee/datadog-runner-auth-python
           readinessProbe: {httpGet: {path: "/auth/logout", port: 8000}, initialDelaySeconds: 5}
