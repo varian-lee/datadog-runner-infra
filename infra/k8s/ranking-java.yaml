@@ -70,6 +70,8 @@ spec:
           ports:
             - containerPort: 8081
           env:
+            - name: DD_SERVICE
+              value: "ranking-java"
             - name: REDIS_DSN
               value: "redis://redis:6379/0"
             #########
