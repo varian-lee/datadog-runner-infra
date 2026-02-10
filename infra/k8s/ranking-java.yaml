@@ -70,10 +70,6 @@ spec:
           ports:
             - containerPort: 8081
           env:
-            - name: DD_SERVICE
-              value: "ranking-java"
-            - name: DD_ENV
-              value: "demo"
             - name: REDIS_DSN
               value: "redis://redis:6379/0"
             #########
@@ -135,7 +131,7 @@ spec:
             #     -Djdk.attach.allowAttachSelf=true --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED -Dobj_name=qa-lgemp-backend-member-b2c -Dnet_collector_ip=qa-aic-scouter-server.lgemp-internal.com -Dtrace_interservice_enabled=true -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.port=9012 -Dcom.sun.management.jmxremote.rmi.port=9012 -Djava.rmi.server.hostname=$(POD_IP) -Dspring.jmx.enabled=true -Dspring.jmx.register-mbeans=true -Dspring.datasource.hikari.register-mbeans=true -Dserver.tomcat.mbeanregistry.enabled=true
             # Git 메타데이터
             - name: DD_GIT_COMMIT_SHA
-              value: ea3dbb33d82d95a37c82a67067a7d8789369d374
+              value: af243e6753d5355fce9e944344342cac3776ed80
             - name: DD_GIT_REPOSITORY_URL
               value: https://github.com/varian-lee/datadog-runner-ranking-java
 ---
